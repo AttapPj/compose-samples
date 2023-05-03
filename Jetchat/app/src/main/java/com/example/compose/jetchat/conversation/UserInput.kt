@@ -17,6 +17,7 @@
 package com.example.compose.jetchat.conversation
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.MutableTransitionState
@@ -30,10 +31,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -214,12 +218,13 @@ private fun SelectorExpanded(
             InputSelector.PICTURE -> FunctionalityNotAvailablePanel()
             InputSelector.MAP -> FunctionalityNotAvailablePanel()
             InputSelector.PHONE -> FunctionalityNotAvailablePanel()
-            else -> { throw NotImplementedError() }
+            else -> {
+                throw NotImplementedError()
+            }
         }
     }
 }
 
-@OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun FunctionalityNotAvailablePanel() {
     AnimatedVisibility(
@@ -333,7 +338,8 @@ private fun InputSelectorButton(
     onClick: () -> Unit,
     icon: ImageVector,
     description: String,
-    selected: Boolean
+    selected: Boolean,
+    modifier: Modifier = Modifier
 ) {
     val backgroundModifier = if (selected) {
         Modifier.background(
@@ -345,7 +351,7 @@ private fun InputSelectorButton(
     }
     IconButton(
         onClick = onClick,
-        modifier = Modifier.then(backgroundModifier)
+        modifier = modifier.then(backgroundModifier)
     ) {
         val tint = if (selected) {
             MaterialTheme.colorScheme.onSecondary
@@ -355,7 +361,9 @@ private fun InputSelectorButton(
         Icon(
             icon,
             tint = tint,
-            modifier = Modifier.padding(8.dp).size(56.dp),
+            modifier = Modifier
+                .padding(8.dp)
+                .size(56.dp),
             contentDescription = description
         )
     }
@@ -369,6 +377,7 @@ private fun NotAvailablePopup(onDismissed: () -> Unit) {
 val KeyboardShownKey = SemanticsPropertyKey<Boolean>("KeyboardShownKey")
 var SemanticsPropertyReceiver.keyboardShownProperty by KeyboardShownKey
 
+@OptIn(ExperimentalAnimationApi::class)
 @ExperimentalFoundationApi
 @Composable
 private fun UserInputText(
@@ -379,61 +388,101 @@ private fun UserInputText(
     onTextFieldFocused: (Boolean) -> Unit,
     focusState: Boolean
 ) {
+    val isRecordingMessage = remember { mutableStateOf(false) }
     val a11ylabel = stringResource(id = R.string.textfield_desc)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(64.dp)
-            .semantics {
-                contentDescription = a11ylabel
-                keyboardShownProperty = keyboardShown
-            },
-        horizontalArrangement = Arrangement.End
-    ) {
-        Surface {
-            Box(
-                modifier = Modifier
-                    .height(64.dp)
-                    .weight(1f)
-                    .align(Alignment.Bottom)
-            ) {
-                var lastFocusState by remember { mutableStateOf(false) }
-                BasicTextField(
-                    value = textFieldValue,
-                    onValueChange = { onTextChanged(it) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 32.dp)
-                        .align(Alignment.CenterStart)
-                        .onFocusChanged { state ->
-                            if (lastFocusState != state.isFocused) {
-                                onTextFieldFocused(state.isFocused)
-                            }
-                            lastFocusState = state.isFocused
-                        },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = keyboardType,
-                        imeAction = ImeAction.Send
-                    ),
-                    maxLines = 1,
-                    cursorBrush = SolidColor(LocalContentColor.current),
-                    textStyle = LocalTextStyle.current.copy(color = LocalContentColor.current)
-                )
-
-                val disableContentColor =
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                if (textFieldValue.text.isEmpty() && !focusState) {
-                    Text(
-                        modifier = Modifier
-                            .align(Alignment.CenterStart)
-                            .padding(start = 32.dp),
-                        text = stringResource(id = R.string.textfield_hint),
-                        style = MaterialTheme.typography.bodyLarge.copy(color = disableContentColor)
-                    )
+    Surface(Modifier.fillMaxWidth().height(64.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .semantics {
+                    contentDescription = a11ylabel
+                    keyboardShownProperty = keyboardShown
+                },
+            horizontalArrangement = Arrangement.End
+        ) {
+            AnimatedContent(
+                targetState = isRecordingMessage.value,
+                label = "text-field",
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            ) { recording ->
+                Box(Modifier.fillMaxSize()) {
+                    if (recording) {
+                        RecordingIndicator()
+                    } else {
+                        UserInputTextField(
+                            textFieldValue,
+                            onTextChanged,
+                            onTextFieldFocused,
+                            keyboardType,
+                            focusState
+                        )
+                    }
                 }
             }
+            RecordButton(
+                recording = isRecordingMessage,
+                onClick = { /* implement */ },
+                onStartRecording = { false },
+                onFinishRecording = { /* handle end of recording */ },
+                onCancelRecording = { /* handle cancel recording */ },
+                modifier = Modifier.fillMaxHeight()
+            )
         }
     }
+}
+
+@Composable
+private fun BoxScope.UserInputTextField(
+    textFieldValue: TextFieldValue,
+    onTextChanged: (TextFieldValue) -> Unit,
+    onTextFieldFocused: (Boolean) -> Unit,
+    keyboardType: KeyboardType,
+    focusState: Boolean
+) {
+    var lastFocusState by remember { mutableStateOf(false) }
+    BasicTextField(
+        value = textFieldValue,
+        onValueChange = { onTextChanged(it) },
+        modifier = Modifier
+            .padding(start = 32.dp)
+            .align(Alignment.CenterStart)
+            .onFocusChanged { state ->
+                if (lastFocusState != state.isFocused) {
+                    onTextFieldFocused(state.isFocused)
+                }
+                lastFocusState = state.isFocused
+            },
+        keyboardOptions = KeyboardOptions(
+            keyboardType = keyboardType,
+            imeAction = ImeAction.Send
+        ),
+        maxLines = 1,
+        cursorBrush = SolidColor(LocalContentColor.current),
+        textStyle = LocalTextStyle.current.copy(color = LocalContentColor.current)
+    )
+
+    val disableContentColor =
+        MaterialTheme.colorScheme.onSurfaceVariant
+    if (textFieldValue.text.isEmpty() && !focusState) {
+        Text(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = 32.dp),
+            text = stringResource(R.string.textfield_hint),
+            style = MaterialTheme.typography.bodyLarge.copy(color = disableContentColor)
+        )
+    }
+}
+
+@Composable
+private fun BoxScope.RecordingIndicator() {
+    Text(
+        modifier = Modifier.align(Alignment.Center),
+        text = stringResource(R.string.swipe_to_cancel_recording),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.bodyLarge
+    )
 }
 
 @Composable
